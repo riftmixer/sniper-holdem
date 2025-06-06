@@ -432,6 +432,17 @@ export default function Game({ gameId, playerId }: GameProps) {
           const isMe = pid === playerId;
           const isCurrentTurn = dealer.currentTurn < dealer.turnOrder.length && dealer.turnOrder[dealer.currentTurn] === pid;
           const seat = seatPositions[idx];
+          // Determine if this player was first to act in the round
+          const isFirstToAct = dealer.turnOrder[0] === pid;
+          // For call/bet label: if bet > 0, show (Bet: X) if first to act, else (Call: X)
+          let betLabel = null;
+          if (player.bet > 0) {
+            if (isFirstToAct) {
+              betLabel = <span className="ml-2 text-xs text-green-300">(Bet: {player.bet})</span>;
+            } else {
+              betLabel = <span className="ml-2 text-xs text-blue-300">(Call: {player.bet})</span>;
+            }
+          }
           return (
             <div
               key={pid}
@@ -463,12 +474,12 @@ export default function Game({ gameId, playerId }: GameProps) {
                   </div>
                 ))}
               </div>
-              {/* Prominent chip count */}
+              {/* Prominent chip count and bet/call label */}
               <div className="mt-1 mb-1">
                 <span className="inline-block px-3 py-1 rounded-full bg-gray-900 text-yellow-300 font-bold text-base shadow border-2 border-yellow-400">
                   {player.chips} chips
                 </span>
-                {player.bet > 0 && <span className="ml-2 text-xs text-green-300">(Bet: {player.bet})</span>}
+                {betLabel}
               </div>
               {player.folded && <div className="text-xs text-red-500">Folded</div>}
               {player.snipedPrediction && (
