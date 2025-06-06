@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { db } from '../firebase';
 import { ref, onValue } from 'firebase/database';
 import { submitBet, foldPlayer, submitSnipe, startGame } from './Dealer';
@@ -107,6 +107,8 @@ export default function Game({ gameId, playerId }: GameProps) {
   const [error, setError] = useState<string | null>(null);
   const [isMyTurn, setIsMyTurn] = useState(false);
   const [actionLog, setActionLog] = useState<string[]>([]);
+  const prevDealerRef = useRef<DealerState | null>(null);
+  const prevPlayersRef = useRef<Record<string, Player>>({});
 
   useEffect(() => {
     const gameRef = ref(db, `games/${gameId}`);
@@ -140,25 +142,42 @@ export default function Game({ gameId, playerId }: GameProps) {
 
   useEffect(() => {
     if (!dealer || !players) return;
-    const log: string[] = [];
-    // For each player in turn order, log their last action if present
+    let newEntries: string[] = [];
+    const prevDealer = prevDealerRef.current;
+    const prevPlayers = prevPlayersRef.current;
+
+    // Phase change
+    if (prevDealer && dealer.phase !== prevDealer.phase) {
+      newEntries.push(`--- Phase: ${dealer.phase.toUpperCase()} ---`);
+    }
+
+    // Player actions (bet, call, raise, fold)
     dealer.turnOrder.forEach((pid) => {
       const p = players[pid];
+      const prevP = prevPlayers[pid];
       if (!p) return;
       if (p.lastAction && typeof p.lastActionAmount === 'number' && p.lastActionAmount > 0) {
-        log.push(`${p.name} ${p.lastAction.toUpperCase()}: ${p.lastActionAmount} chips`);
-      } else if (p.folded) {
-        log.push(`${p.name} FOLDED`);
+        if (!prevP || p.lastAction !== prevP.lastAction || p.lastActionAmount !== prevP.lastActionAmount) {
+          newEntries.push(`${p.name} ${p.lastAction.toUpperCase()}: ${p.lastActionAmount} chips`);
+        }
+      } else if (p.folded && (!prevP || !prevP.folded)) {
+        newEntries.push(`${p.name} FOLDED`);
       }
     });
-    // Add whose turn it is
+
+    // Whose turn
     if (dealer.currentTurn < dealer.turnOrder.length) {
       const current = players[dealer.turnOrder[dealer.currentTurn]];
-      if (current) {
-        log.push(`→ ${current.name}'s turn`);
+      if (current && (!prevDealer || dealer.currentTurn !== prevDealer.currentTurn)) {
+        newEntries.push(`→ ${current.name}'s turn`);
       }
     }
-    setActionLog(log);
+
+    if (newEntries.length > 0) {
+      setActionLog((log) => [...log, ...newEntries]);
+    }
+    prevDealerRef.current = dealer;
+    prevPlayersRef.current = players;
   }, [players, dealer]);
 
   const handleBet = async () => {
