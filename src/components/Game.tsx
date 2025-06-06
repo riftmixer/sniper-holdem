@@ -170,74 +170,84 @@ export default function Game({ gameId, playerId }: GameProps) {
   const renderRoundHistory = () => {
     if (!dealer?.roundResults?.length) return null;
 
+    // Helper to render a player's cards
+    const renderCards = (cards: number[] | undefined) => (
+      <span className="inline-flex gap-1 align-middle ml-1">
+        {cards && cards.map((card, i) => (
+          <span key={i} className="inline-block w-6 h-8 bg-white text-black rounded text-center font-bold border border-gray-400 align-middle">{card}</span>
+        ))}
+      </span>
+    );
+
     return (
-      <div className="fixed right-4 top-4 w-80 bg-gray-800 rounded-lg p-4 shadow-lg max-h-[calc(100vh-2rem)] overflow-y-auto">
-        <h2 className="text-xl font-bold mb-4 text-white">Round History</h2>
-        {dealer.roundResults.map((result, index) => (
-          <div key={index} className="mb-6 p-4 bg-gray-700 rounded-lg">
-            <div className="text-lg font-semibold text-white mb-2">
-              Round {result.roundNumber}
-            </div>
-            
-            {/* Winner and Pot */}
-            <div className="mb-3">
-              <div className="text-green-400">
-                {result.winnerId === 'split' ? (
-                  'Pot Split'
-                ) : (
-                  <>
-                    Winner: {players[result.winnerId]?.name || 'Unknown'}
-                    <span className="text-gray-400 ml-2">
-                      (+{result.pot} chips)
-                    </span>
-                  </>
+      <div className="fixed right-4 top-4 w-96 bg-gray-800 rounded-lg p-4 shadow-lg max-h-[calc(100vh-2rem)] overflow-y-auto">
+        <h2 className="text-2xl font-bold mb-4 text-white">Round History</h2>
+        {dealer.roundResults.map((result, index) => {
+          // Find the winning player and hand
+          const winner = result.winnerId && result.winnerId !== 'split' ? players[result.winnerId] : null;
+          const winningHand = result.winningHand;
+          // Build explanation
+          let explanation = '';
+          if (result.winnerId === 'split') {
+            explanation = 'Pot was split because all players were sniped or there was a tie.';
+          } else if (winningHand) {
+            explanation = `${winner?.name || 'Unknown'} won with a ${winningHand.handType} because it was the highest eligible hand.`;
+          }
+          return (
+            <div key={index} className="mb-8 p-4 bg-gray-700 rounded-lg">
+              <div className="text-xl font-semibold text-white mb-2">Round {result.roundNumber}</div>
+              {/* Winner and Pot */}
+              <div className="mb-2">
+                <div className={result.winnerId === 'split' ? 'text-green-300 font-bold' : 'text-green-400 font-bold'}>
+                  {result.winnerId === 'split' ? 'Pot Split' : `Winner: ${winner?.name || 'Unknown'} (+${result.pot} chips)`}
+                </div>
+                {winningHand && (
+                  <div className="text-blue-300 mt-1">
+                    Winning Hand: <span className="font-bold">{winningHand.handType}</span> {renderCards(winningHand.cards)}
+                  </div>
                 )}
+                {explanation && <div className="text-xs text-gray-300 mt-1">{explanation}</div>}
               </div>
-            </div>
-
-            {/* Winning Hand */}
-            {result.winningHand && (
-              <div className="mb-3">
-                <div className="text-blue-400">
-                  Winning Hand: {result.winningHand.handType}
-                </div>
-                <div className="flex gap-1 mt-1">
-                  {result.winningHand.cards.map((card, i) => (
-                    <div key={i} className="w-6 h-8 bg-white rounded flex items-center justify-center text-sm text-black">
-                      {card}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Snipe Results */}
-            {result.snipeResults.length > 0 && (
-              <div className="mb-3">
-                <div className="text-yellow-400 mb-1">Snipe Attempts:</div>
-                {result.snipeResults.map((snipe, i) => (
-                  <div key={i} className="text-sm">
-                    {players[snipe.sniperId]?.name || 'Unknown'} predicted{' '}
-                    <span className={snipe.success ? 'text-green-400' : 'text-red-400'}>
-                      {snipe.predicted}
-                    </span>
-                    {' '}({snipe.success ? 'Success' : 'Failed'})
+              {/* Show all players' hands */}
+              <div className="mb-2">
+                <div className="text-gray-200 font-semibold mb-1">Player Hands:</div>
+                {Object.entries(players).map(([pid, p]) => (
+                  <div key={pid} className="text-sm text-gray-100 mb-1">
+                    <span className="font-bold">{p.name}</span>: {renderCards(p.hand)}
+                    {result.winnerId === pid && <span className="ml-2 text-green-400">(Winner)</span>}
+                    {result.snipeResults.some(s => s.success && s.predicted === result.winningHand?.handType && pid === result.winnerId) && (
+                      <span className="ml-2 text-red-400">(Sniped!)</span>
+                    )}
                   </div>
                 ))}
               </div>
-            )}
-
-            {/* Chip Changes */}
-            <div className="text-sm text-gray-400">
-              <div className="mb-1">Chip Changes:</div>
-              {result.chipChanges && Object.entries(result.chipChanges).map(([playerId, change]) => (
-                <div key={playerId} className={change > 0 ? 'text-green-400' : change < 0 ? 'text-red-400' : 'text-gray-300'}>
-                  {players[playerId]?.name || 'Unknown'}: {change > 0 ? '+' : ''}{change}
+              {/* Snipe Results */}
+              {result.snipeResults.length > 0 && (
+                <div className="mb-2">
+                  <div className="text-yellow-400 font-bold mb-1">Snipe Attempts:</div>
+                  {result.snipeResults.map((snipe, i) => (
+                    <div key={i} className="text-sm">
+                      {players[snipe.sniperId]?.name || 'Unknown'} predicted{' '}
+                      <span className={snipe.success ? 'text-green-400' : 'text-red-400'}>
+                        {snipe.predicted}
+                      </span>
+                      {' '}({snipe.success ? 'Success' : 'Failed'})
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
+              {/* Chip Changes */}
+              <div className="text-sm text-gray-400">
+                <div className="mb-1">Chip Changes:</div>
+                {result.chipChanges && Object.entries(result.chipChanges).map(([playerId, change]) => (
+                  <div key={playerId} className={change > 0 ? 'text-green-400' : change < 0 ? 'text-red-400' : 'text-gray-300'}>
+                    {players[playerId]?.name || 'Unknown'}: {change > 0 ? '+' : ''}{change}
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     );
   };
