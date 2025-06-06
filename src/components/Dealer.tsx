@@ -218,8 +218,6 @@ export async function submitBet(gameId: string, playerId: string, amount: number
     }
   }
 
-  console.log(`[submitBet] Player ${playerId} acting. currentBet=${currentBet}, maxBet=${maxBet}, toCall=${toCall}, amount=${amount}, diff=${diff}, chips before=${players[playerId].chips}`);
-
   // Deduct chips and update bet
   players[playerId].chips -= diff;
   players[playerId].bet = totalBet;
@@ -238,6 +236,13 @@ export async function submitBet(gameId: string, playerId: string, amount: number
     players[playerId].hasActed = true; // Current player has acted
   }
 
+  // Always log the action after updating state
+  logAction(dealer, players, {
+    playerId,
+    action: players[playerId].lastAction || 'bet',
+    amount: players[playerId].lastActionAmount,
+  });
+
   // Advance turn to next active player who hasn't acted
   const activePlayers = dealer.turnOrder.filter((id: string) => !players[id].folded);
   let nextTurn = (dealer.currentTurn + 1) % activePlayers.length;
@@ -250,29 +255,19 @@ export async function submitBet(gameId: string, playerId: string, amount: number
     nextTurn = (nextTurn + 1) % activePlayers.length;
   }
 
-  // If we've gone through all players and everyone has acted or matched, advance phase
-  if (safety >= activePlayers.length) {
-    const allActed = activePlayers.every((id: string) => 
-      players[id].hasActed || 
-      players[id].bet >= dealer.maxBet || 
-      players[id].chips === 0
-    );
-    if (allActed) {
-      await advancePhase(gameId);
-      return;
-    }
-  }
-
   dealer.currentTurn = nextTurn;
-  console.log(`[submitBet] Player ${playerId} chips after=${players[playerId].chips}, bet=${players[playerId].bet}, pot=${dealer.pot}`);
-
-  logAction(dealer, players, {
-    playerId,
-    action: players[playerId].lastAction || 'bet',
-    amount: players[playerId].lastActionAmount,
-  });
 
   await update(gameRef, { dealer, players });
+
+  // Now check if all players have acted and advance phase if needed
+  const allActed = activePlayers.every((id: string) => 
+    players[id].hasActed || 
+    players[id].bet >= dealer.maxBet || 
+    players[id].chips === 0
+  );
+  if (allActed) {
+    await advancePhase(gameId);
+  }
 }
 
 export async function foldPlayer(gameId: string, playerId: string) {
