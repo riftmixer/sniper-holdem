@@ -157,11 +157,13 @@ export default function Game({ gameId, playerId }: GameProps) {
       const prevP = prevPlayers[pid];
       if (!p) return;
       if (p.lastAction && typeof p.lastActionAmount === 'number' && p.lastActionAmount > 0) {
-        if (!prevP || p.lastAction !== prevP.lastAction || p.lastActionAmount !== prevP.lastActionAmount) {
-          newEntries.push(`${p.name} ${p.lastAction.toUpperCase()}: ${p.lastActionAmount} chips`);
-        }
+        // Build chip summary
+        const chipSummary = dealer.turnOrder.map(id => `${players[id]?.name}: ${players[id]?.chips}`).join(', ');
+        newEntries.push(`${p.name} ${p.lastAction.toUpperCase()}: ${p.lastActionAmount} chips | Pot: ${dealer.pot} | Chips: ${chipSummary}`);
       } else if (p.folded && (!prevP || !prevP.folded)) {
-        newEntries.push(`${p.name} FOLDED`);
+        // Build chip summary
+        const chipSummary = dealer.turnOrder.map(id => `${players[id]?.name}: ${players[id]?.chips}`).join(', ');
+        newEntries.push(`${p.name} FOLDED | Pot: ${dealer.pot} | Chips: ${chipSummary}`);
       }
     });
 
