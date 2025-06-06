@@ -160,6 +160,7 @@ export async function submitBet(gameId: string, playerId: string, amount: number
   if (!dealer || !players[playerId]) return;
   if (dealer.turnOrder[dealer.currentTurn] !== playerId) return; // Only current player can act
   if (players[playerId].folded) return;
+  if (amount < 1) return;
 
   const currentBet = players[playerId].bet || 0;
   const prevMaxBet = dealer.maxBet || 0;

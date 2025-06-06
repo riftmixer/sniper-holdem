@@ -207,8 +207,8 @@ export default function Game({ gameId, playerId }: GameProps) {
   }, [isMyTurn, dealer, players, playerId]);
 
   const handleBetOrCall = async () => {
-    if (betInput <= 0) {
-      setError('Bet must be greater than 0');
+    if (betInput < 1) {
+      setError('Bet must be at least 1');
       return;
     }
     try {
@@ -344,15 +344,15 @@ export default function Game({ gameId, playerId }: GameProps) {
                 type="number"
                 value={betInput}
                 onChange={(e) => setBetInput(Number(e.target.value))}
-                min={isFirstToAct ? 1 : toCall}
+                min={Math.max(1, isFirstToAct ? 1 : toCall)}
                 max={currentPlayer.chips}
                 className="w-24 px-2 py-1 border rounded text-black"
                 placeholder={isFirstToAct ? 'Bet amount' : 'Call or raise'}
               />
               <button
                 onClick={handleBetOrCall}
-                className={`bg-blue-500 hover:bg-blue-600 text-white px-4 py-1 rounded ${betInput < (isFirstToAct ? 1 : toCall) || betInput > currentPlayer.chips ? 'opacity-50 cursor-not-allowed' : ''}`}
-                disabled={betInput < (isFirstToAct ? 1 : toCall) || betInput > currentPlayer.chips}
+                className={`bg-blue-500 hover:bg-blue-600 text-white px-4 py-1 rounded ${betInput < Math.max(1, isFirstToAct ? 1 : toCall) || betInput > currentPlayer.chips ? 'opacity-50 cursor-not-allowed' : ''}`}
+                disabled={betInput < Math.max(1, isFirstToAct ? 1 : toCall) || betInput > currentPlayer.chips}
               >
                 {isFirstToAct ? 'Bet' : betInput === toCall ? `Call ${toCall}` : 'Raise'}
               </button>
