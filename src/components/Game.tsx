@@ -106,6 +106,7 @@ export default function Game({ gameId, playerId }: GameProps) {
   const [betInput, setBetInput] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
   const [isMyTurn, setIsMyTurn] = useState(false);
+  const [actionLog, setActionLog] = useState<string[]>([]);
 
   useEffect(() => {
     const gameRef = ref(db, `games/${gameId}`);
@@ -136,6 +137,29 @@ export default function Game({ gameId, playerId }: GameProps) {
       dealer.turnOrder[dealer.currentTurn] === playerId;
     setIsMyTurn(isTurn);
   }, [dealer?.currentTurn, dealer?.turnOrder, playerId]);
+
+  useEffect(() => {
+    if (!dealer || !players) return;
+    const log: string[] = [];
+    // For each player in turn order, log their last action if present
+    dealer.turnOrder.forEach((pid) => {
+      const p = players[pid];
+      if (!p) return;
+      if (p.lastAction && typeof p.lastActionAmount === 'number' && p.lastActionAmount > 0) {
+        log.push(`${p.name} ${p.lastAction.toUpperCase()}: ${p.lastActionAmount} chips`);
+      } else if (p.folded) {
+        log.push(`${p.name} FOLDED`);
+      }
+    });
+    // Add whose turn it is
+    if (dealer.currentTurn < dealer.turnOrder.length) {
+      const current = players[dealer.turnOrder[dealer.currentTurn]];
+      if (current) {
+        log.push(`→ ${current.name}'s turn`);
+      }
+    }
+    setActionLog(log);
+  }, [players, dealer]);
 
   const handleBet = async () => {
     if (betInput <= 0) {
@@ -495,6 +519,14 @@ export default function Game({ gameId, playerId }: GameProps) {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white p-4">
+      <div className="fixed left-4 top-4 w-96 bg-gray-800 rounded-lg p-4 shadow-lg max-h-[calc(100vh-2rem)] overflow-y-auto z-50">
+        <h2 className="text-2xl font-bold mb-4 text-white">Action Log</h2>
+        <div className="text-white space-y-2">
+          {actionLog.map((entry, idx) => (
+            <div key={idx} className="text-sm">{entry}</div>
+          ))}
+        </div>
+      </div>
       {renderRoundHistory()}
       <div className="max-w-4xl mx-auto">
         <h1 className="text-3xl font-bold mb-4">🔥 Sniper Hold'em v2 🔥</h1>
