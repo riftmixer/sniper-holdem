@@ -332,8 +332,6 @@ export default function Game({ gameId, playerId }: GameProps) {
     const maxBet = dealer.maxBet || 0;
     const myBet = currentPlayer.bet || 0;
     const toCall = maxBet - myBet;
-    const canCall = toCall > 0 && toCall <= currentPlayer.chips;
-    const canRaise = betInput > toCall && betInput <= currentPlayer.chips;
     const isFirstToAct = maxBet === 0;
 
     return (
