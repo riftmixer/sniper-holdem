@@ -162,13 +162,13 @@ export async function submitBet(gameId: string, playerId: string, amount: number
   if (players[playerId].folded) return;
 
   const currentBet = players[playerId].bet || 0;
-  const maxBet = dealer.maxBet || 0;
-  const toCall = maxBet - currentBet;
-  const isFirstToAct = maxBet === 0;
+  const prevMaxBet = dealer.maxBet || 0;
+  const toCall = prevMaxBet - currentBet;
+  const isFirstToAct = prevMaxBet === 0;
 
   // Prevent acting if already matched the max bet (unless it's the first bet of the round)
-  if (!isFirstToAct && currentBet >= maxBet) {
-    console.log(`[submitBet] Player ${playerId} already matched max bet. currentBet=${currentBet}, maxBet=${maxBet}`);
+  if (!isFirstToAct && currentBet >= prevMaxBet) {
+    console.log(`[submitBet] Player ${playerId} already matched max bet. currentBet=${currentBet}, maxBet=${prevMaxBet}`);
     return;
   }
 
@@ -186,7 +186,7 @@ export async function submitBet(gameId: string, playerId: string, amount: number
     players[playerId].lastAction = 'bet';
     players[playerId].lastActionAmount = amount;
   } else {
-    // Call or raise
+    // Not first to act: determine if call or raise
     if (amount === toCall) {
       // This is a call
       if (toCall <= 0 || toCall > players[playerId].chips) {
@@ -197,24 +197,20 @@ export async function submitBet(gameId: string, playerId: string, amount: number
       totalBet = currentBet + toCall;
       players[playerId].lastAction = 'call';
       players[playerId].lastActionAmount = toCall;
-    } else {
+    } else if (amount > toCall) {
       // This is a raise
-      if (amount < toCall + 1) {
-        console.log(`[submitBet] Raise must be greater than toCall. amount=${amount}, toCall=${toCall}`);
-        return;
-      }
       if (amount > players[playerId].chips) {
         console.log(`[submitBet] Amount greater than chips. amount=${amount}, chips=${players[playerId].chips}`);
         return;
       }
       diff = amount;
       totalBet = currentBet + amount;
-      if (totalBet < maxBet && totalBet !== players[playerId].chips) {
-        console.log(`[submitBet] Total bet less than maxBet and not all-in. totalBet=${totalBet}, maxBet=${maxBet}, chips=${players[playerId].chips}`);
-        return;
-      }
       players[playerId].lastAction = 'raise';
       players[playerId].lastActionAmount = amount;
+    } else {
+      // Invalid action
+      console.log(`[submitBet] Invalid action. amount=${amount}, toCall=${toCall}`);
+      return;
     }
   }
 
@@ -225,7 +221,7 @@ export async function submitBet(gameId: string, playerId: string, amount: number
 
   // Update pot and max bet
   dealer.pot = (dealer.pot || 0) + diff;
-  if (totalBet > dealer.maxBet) {
+  if (totalBet > prevMaxBet) {
     dealer.maxBet = totalBet;
     // Reset hasActed for all players who haven't folded
     Object.keys(players).forEach((pid: string) => {
