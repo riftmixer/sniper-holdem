@@ -189,7 +189,24 @@ export default function Game({ gameId, playerId }: GameProps) {
     prevPlayersRef.current = players;
   }, [players, dealer]);
 
-  const handleBet = async () => {
+  useEffect(() => {
+    if (!isMyTurn || !dealer || !players) return;
+    const currentPlayer = players[playerId];
+    if (!currentPlayer || currentPlayer.hasActed) return;
+    const maxBet = dealer.maxBet || 0;
+    const myBet = currentPlayer.bet || 0;
+    const toCall = maxBet - myBet;
+    const isFirstToAct = maxBet === 0;
+
+    if (!isFirstToAct && betInput !== toCall) {
+      setBetInput(toCall);
+    }
+    if (isFirstToAct && betInput !== 0) {
+      setBetInput(0);
+    }
+  }, [isMyTurn, dealer, players, playerId]);
+
+  const handleBetOrCall = async () => {
     if (betInput <= 0) {
       setError('Bet must be greater than 0');
       return;
@@ -319,78 +336,34 @@ export default function Game({ gameId, playerId }: GameProps) {
     const canRaise = betInput > toCall && betInput <= currentPlayer.chips;
     const isFirstToAct = maxBet === 0;
 
-    // Unified bet handler for both Bet and Call
-    const handleCall = async () => {
-      if (canCall) {
-        await submitBet(gameId, playerId, toCall);
-        setBetInput(0);
-      }
-    };
-
     return (
       <div className="mt-4 space-y-4">
         {/* Betting Controls */}
         {(dealer.phase === 'bet1' || dealer.phase === 'bet2') && (
           <div>
             <div className="flex gap-2 items-center mb-2">
-              {isFirstToAct ? (
-                <>
-                  <input
-                    type="number"
-                    value={betInput}
-                    onChange={(e) => setBetInput(Number(e.target.value))}
-                    min={1}
-                    max={currentPlayer.chips}
-                    className="w-24 px-2 py-1 border rounded text-black"
-                    placeholder="Bet amount"
-                  />
-                  <button
-                    onClick={handleBet}
-                    className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-1 rounded"
-                    disabled={betInput < 1 || betInput > currentPlayer.chips}
-                  >
-                    Bet
-                  </button>
-                  <button
-                    onClick={handleFold}
-                    className="bg-red-500 hover:bg-red-600 text-white px-4 py-1 rounded"
-                  >
-                    Fold
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    onClick={handleCall}
-                    className="bg-green-500 hover:bg-green-600 text-white px-4 py-1 rounded"
-                    disabled={!canCall}
-                  >
-                    Call {toCall}
-                  </button>
-                  <input
-                    type="number"
-                    value={betInput}
-                    onChange={(e) => setBetInput(Number(e.target.value))}
-                    min={toCall + 1}
-                    max={currentPlayer.chips}
-                    className="w-24 px-2 py-1 border rounded text-black"
-                    placeholder="Raise to"
-                  />
-                  <button
-                    onClick={handleBet}
-                    className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-1 rounded"
-                    disabled={!canRaise}
-                  >
-                    Raise
-                  </button>
-                  <button
-                    onClick={handleFold}
-                    className="bg-red-500 hover:bg-red-600 text-white px-4 py-1 rounded"
-                  >
-                    Fold
-                  </button>
-                </>
-              )}
+              <input
+                type="number"
+                value={betInput}
+                onChange={(e) => setBetInput(Number(e.target.value))}
+                min={isFirstToAct ? 1 : toCall}
+                max={currentPlayer.chips}
+                className="w-24 px-2 py-1 border rounded text-black"
+                placeholder={isFirstToAct ? 'Bet amount' : 'Call or raise'}
+              />
+              <button
+                onClick={handleBetOrCall}
+                className={`bg-blue-500 hover:bg-blue-600 text-white px-4 py-1 rounded ${betInput < (isFirstToAct ? 1 : toCall) || betInput > currentPlayer.chips ? 'opacity-50 cursor-not-allowed' : ''}`}
+                disabled={betInput < (isFirstToAct ? 1 : toCall) || betInput > currentPlayer.chips}
+              >
+                {isFirstToAct ? 'Bet' : betInput === toCall ? `Call ${toCall}` : 'Raise'}
+              </button>
+              <button
+                onClick={handleFold}
+                className="bg-red-500 hover:bg-red-600 text-white px-4 py-1 rounded"
+              >
+                Fold
+              </button>
             </div>
             {error && <div className="text-red-500 text-sm">{error}</div>}
           </div>
