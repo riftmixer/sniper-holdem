@@ -86,6 +86,18 @@ type DealerState = {
   }>;
 };
 
+function logAction(dealer: any, players: any, entry: { playerId?: string, action: string, amount?: number, phase?: string }) {
+  if (!dealer.actionHistory) dealer.actionHistory = [];
+  dealer.actionHistory.push({
+    playerId: entry.playerId || '',
+    action: entry.action,
+    amount: entry.amount,
+    pot: dealer.pot,
+    chips: Object.fromEntries(Object.entries(players).map(([id, p]) => [id, (p as any).chips])),
+    phase: entry.phase || dealer.phase,
+  });
+}
+
 export async function startGame(gameId: string) {
   const gameRef = ref(db, `games/${gameId}`);
   const snap = await get(gameRef);
@@ -254,14 +266,10 @@ export async function submitBet(gameId: string, playerId: string, amount: number
   dealer.currentTurn = nextTurn;
   console.log(`[submitBet] Player ${playerId} chips after=${players[playerId].chips}, bet=${players[playerId].bet}, pot=${dealer.pot}`);
 
-  if (!dealer.actionHistory) dealer.actionHistory = [];
-  dealer.actionHistory.push({
+  logAction(dealer, players, {
     playerId,
     action: players[playerId].lastAction || 'bet',
     amount: players[playerId].lastActionAmount,
-    pot: dealer.pot,
-    chips: Object.fromEntries(Object.entries(players).map(([id, p]) => [id, (p as any).chips])),
-    phase: dealer.phase,
   });
 
   await update(gameRef, { dealer, players });
@@ -285,13 +293,9 @@ export async function foldPlayer(gameId: string, playerId: string) {
   }
   dealer.currentTurn = nextTurn;
 
-  if (!dealer.actionHistory) dealer.actionHistory = [];
-  dealer.actionHistory.push({
+  logAction(dealer, players, {
     playerId,
     action: 'fold',
-    pot: dealer.pot,
-    chips: Object.fromEntries(Object.entries(players).map(([id, p]) => [id, (p as any).chips])),
-    phase: dealer.phase,
   });
 
   await update(gameRef, { dealer, players });
@@ -461,6 +465,11 @@ export async function resolveBets(gameId: string) {
     dealer.actionHistory = [];
   }
 
+  logAction(dealer, players, {
+    action: 'phase',
+    phase: dealer.phase,
+  });
+
   await update(gameRef, { dealer, players });
 }
 
@@ -546,6 +555,11 @@ export async function advancePhase(gameId: string) {
   if (dealer.phase === 'bet1') {
     dealer.actionHistory = [];
   }
+
+  logAction(dealer, players, {
+    action: 'phase',
+    phase: dealer.phase,
+  });
 
   await update(gameRef, { dealer, players });
 }
