@@ -434,8 +434,6 @@ export default function Game({ gameId, playerId }: GameProps) {
           const isMe = pid === playerId;
           const isCurrentTurn = dealer.currentTurn < dealer.turnOrder.length && dealer.turnOrder[dealer.currentTurn] === pid;
           const seat = seatPositions[idx];
-          // Determine if this player was first to act in the round
-          const isFirstToAct = dealer.turnOrder[0] === pid;
           let actionLabel = null;
           if (player.lastAction && typeof player.lastActionAmount === 'number' && player.lastActionAmount > 0) {
             if (player.lastAction === 'bet') {
