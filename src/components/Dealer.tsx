@@ -91,7 +91,7 @@ function logAction(dealer: any, players: any, entry: { playerId?: string, action
   dealer.actionHistory.push({
     playerId: entry.playerId || '',
     action: entry.action,
-    amount: entry.amount,
+    amount: typeof entry.amount === 'number' ? entry.amount : null,
     pot: dealer.pot,
     chips: Object.fromEntries(Object.entries(players).map(([id, p]) => [id, (p as any).chips])),
     phase: entry.phase || dealer.phase,
