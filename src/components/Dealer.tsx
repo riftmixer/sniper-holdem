@@ -76,6 +76,14 @@ type DealerState = {
   draws: Record<string, number>;
   roundNumber: number;
   roundResults: RoundResult[];
+  actionHistory?: Array<{
+    playerId: string;
+    action: string;
+    amount?: number;
+    pot: number;
+    chips: Record<string, number>;
+    phase: string;
+  }>;
 };
 
 export async function startGame(gameId: string) {
@@ -116,7 +124,8 @@ export async function startGame(gameId: string) {
     turnOrder,
     draws,
     roundNumber: (dealer.roundNumber || 0) + 1,
-    roundResults: dealer.roundResults || []
+    roundResults: dealer.roundResults || [],
+    actionHistory: [],
   };
 
   // Deal initial hands
@@ -244,6 +253,17 @@ export async function submitBet(gameId: string, playerId: string, amount: number
 
   dealer.currentTurn = nextTurn;
   console.log(`[submitBet] Player ${playerId} chips after=${players[playerId].chips}, bet=${players[playerId].bet}, pot=${dealer.pot}`);
+
+  if (!dealer.actionHistory) dealer.actionHistory = [];
+  dealer.actionHistory.push({
+    playerId,
+    action: players[playerId].lastAction || 'bet',
+    amount: players[playerId].lastActionAmount,
+    pot: dealer.pot,
+    chips: Object.fromEntries(Object.entries(players).map(([id, p]) => [id, (p as any).chips])),
+    phase: dealer.phase,
+  });
+
   await update(gameRef, { dealer, players });
 }
 
@@ -264,6 +284,16 @@ export async function foldPlayer(gameId: string, playerId: string) {
     nextTurn = (nextTurn + 1) % totalPlayers;
   }
   dealer.currentTurn = nextTurn;
+
+  if (!dealer.actionHistory) dealer.actionHistory = [];
+  dealer.actionHistory.push({
+    playerId,
+    action: 'fold',
+    pot: dealer.pot,
+    chips: Object.fromEntries(Object.entries(players).map(([id, p]) => [id, (p as any).chips])),
+    phase: dealer.phase,
+  });
+
   await update(gameRef, { dealer, players });
 }
 
@@ -421,6 +451,16 @@ export async function resolveBets(gameId: string) {
     players[id].lastActionAmount = null;
   }
 
+  if (dealer.phase === 'snipe') {
+    await resolveBets(gameId);
+    // Start new round
+    await startNewRound(gameId);
+    return;
+  }
+  if (dealer.phase === 'bet1') {
+    dealer.actionHistory = [];
+  }
+
   await update(gameRef, { dealer, players });
 }
 
@@ -495,6 +535,16 @@ export async function advancePhase(gameId: string) {
       return;
     default:
       dealer.phase = 'bet1';
+  }
+
+  if (dealer.phase === 'snipe') {
+    await resolveBets(gameId);
+    // Start new round
+    await startNewRound(gameId);
+    return;
+  }
+  if (dealer.phase === 'bet1') {
+    dealer.actionHistory = [];
   }
 
   await update(gameRef, { dealer, players });

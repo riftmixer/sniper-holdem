@@ -46,6 +46,13 @@ type DealerState = {
   draws: Record<string, number>;
   roundNumber: number;
   roundResults: RoundResult[];
+  actionHistory?: Array<{
+    playerId: string;
+    action: string;
+    amount?: number;
+    chips: Record<string, number>;
+    pot: number;
+  }>;
 };
 
 type GameProps = {
@@ -543,9 +550,22 @@ export default function Game({ gameId, playerId }: GameProps) {
       <div className="fixed left-4 top-4 w-96 bg-gray-800 rounded-lg p-4 shadow-lg max-h-[calc(100vh-2rem)] overflow-y-auto z-50">
         <h2 className="text-2xl font-bold mb-4 text-white">Action Log</h2>
         <div className="text-white space-y-2">
-          {actionLog.map((entry, idx) => (
-            <div key={idx} className="text-sm">{entry}</div>
-          ))}
+          {dealer?.actionHistory && dealer.actionHistory.length > 0 ? (
+            dealer.actionHistory.map((entry, idx) => {
+              const name = players[entry.playerId]?.name || entry.playerId;
+              const chipSummary = Object.entries(entry.chips)
+                .map(([id, chips]) => `${players[id]?.name || id}: ${chips}`)
+                .join(', ');
+              let actionText = `${name} ${entry.action.toUpperCase()}`;
+              if (typeof entry.amount === 'number') actionText += `: ${entry.amount} chips`;
+              actionText += ` | Pot: ${entry.pot} | Chips: ${chipSummary}`;
+              return <div key={idx} className="text-sm">{actionText}</div>;
+            })
+          ) : (
+            actionLog.map((entry, idx) => (
+              <div key={idx} className="text-sm">{entry}</div>
+            ))
+          )}
         </div>
       </div>
       {renderRoundHistory()}
