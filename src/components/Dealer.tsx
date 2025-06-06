@@ -388,7 +388,7 @@ export async function resolveBets(gameId: string) {
     snipeResults: Object.entries(predictions).map(([sniperId, predicted]) => ({
       sniperId,
       predicted,
-      success: Object.entries(hands).some(([targetId, [type]]) => type === predicted)
+      success: Object.values(hands).some(([type]) => type === predicted)
     })),
     playerChips: playerChips,
     chipChanges: chipChanges
