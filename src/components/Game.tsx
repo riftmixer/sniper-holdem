@@ -13,6 +13,8 @@ type Player = {
   hasActed: boolean;
   snipedPrediction: string | null;
   draw: number;
+  lastAction?: string | null;
+  lastActionAmount?: number | null;
 };
 
 type RoundResult = {
@@ -434,13 +436,14 @@ export default function Game({ gameId, playerId }: GameProps) {
           const seat = seatPositions[idx];
           // Determine if this player was first to act in the round
           const isFirstToAct = dealer.turnOrder[0] === pid;
-          // For call/bet label: if bet > 0, show (Bet: X) if first to act, else (Call: X)
-          let betLabel = null;
-          if (player.bet > 0) {
-            if (isFirstToAct) {
-              betLabel = <span className="ml-2 text-xs text-green-300">(Bet: {player.bet})</span>;
-            } else {
-              betLabel = <span className="ml-2 text-xs text-blue-300">(Call: {player.bet})</span>;
+          let actionLabel = null;
+          if (player.lastAction && typeof player.lastActionAmount === 'number' && player.lastActionAmount > 0) {
+            if (player.lastAction === 'bet') {
+              actionLabel = <span className="ml-2 text-xs text-green-300">(Bet: {player.lastActionAmount})</span>;
+            } else if (player.lastAction === 'call') {
+              actionLabel = <span className="ml-2 text-xs text-blue-300">(Call: {player.lastActionAmount})</span>;
+            } else if (player.lastAction === 'raise') {
+              actionLabel = <span className="ml-2 text-xs text-yellow-300">(Raise: {player.lastActionAmount})</span>;
             }
           }
           return (
@@ -479,7 +482,7 @@ export default function Game({ gameId, playerId }: GameProps) {
                 <span className="inline-block px-3 py-1 rounded-full bg-gray-900 text-yellow-300 font-bold text-base shadow border-2 border-yellow-400">
                   {player.chips} chips
                 </span>
-                {betLabel}
+                {actionLabel}
               </div>
               {player.folded && <div className="text-xs text-red-500">Folded</div>}
               {player.snipedPrediction && (
