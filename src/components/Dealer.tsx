@@ -1,7 +1,7 @@
 // src/components/Dealer.tsx
 
 import { db } from '../firebase';
-import { ref, set, get, update } from 'firebase/database';
+import { ref, get, update } from 'firebase/database';
 
 function getRandomCard(deck: number[]): number {
   const idx = Math.floor(Math.random() * deck.length);
