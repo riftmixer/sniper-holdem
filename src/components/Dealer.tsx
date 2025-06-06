@@ -97,6 +97,8 @@ export async function startGame(gameId: string) {
     updates[`players/${id}/bet`] = 0;
     updates[`players/${id}/snipedPrediction`] = null;
     updates[`players/${id}/hasActed`] = false;
+    updates[`players/${id}/lastAction`] = null;
+    updates[`players/${id}/lastActionAmount`] = null;
   }
 
   // Sort players by draw value (highest first)
@@ -160,6 +162,8 @@ export async function submitBet(gameId: string, playerId: string, amount: number
     }
     diff = amount;
     totalBet = amount;
+    players[playerId].lastAction = 'bet';
+    players[playerId].lastActionAmount = amount;
   } else {
     // Call or raise
     if (amount === toCall) {
@@ -170,6 +174,8 @@ export async function submitBet(gameId: string, playerId: string, amount: number
       }
       diff = toCall;
       totalBet = currentBet + toCall;
+      players[playerId].lastAction = 'call';
+      players[playerId].lastActionAmount = toCall;
     } else {
       // This is a raise
       if (amount < toCall + 1) {
@@ -186,6 +192,8 @@ export async function submitBet(gameId: string, playerId: string, amount: number
         console.log(`[submitBet] Total bet less than maxBet and not all-in. totalBet=${totalBet}, maxBet=${maxBet}, chips=${players[playerId].chips}`);
         return;
       }
+      players[playerId].lastAction = 'raise';
+      players[playerId].lastActionAmount = amount;
     }
   }
 
@@ -409,6 +417,8 @@ export async function resolveBets(gameId: string) {
     players[id].folded = false;
     players[id].hasActed = false;
     players[id].snipedPrediction = null;
+    players[id].lastAction = null;
+    players[id].lastActionAmount = null;
   }
 
   await update(gameRef, { dealer, players });
@@ -435,6 +445,8 @@ export async function startNewRound(gameId: string) {
     players[id].folded = false;
     players[id].hasActed = false;
     players[id].snipedPrediction = null;
+    players[id].lastAction = null;
+    players[id].lastActionAmount = null;
   }
 
   // Start new game with updated chip counts
@@ -455,6 +467,8 @@ export async function advancePhase(gameId: string) {
     players[id].hasActed = false;
     // DO NOT reset bets here!
     // players[id].bet = 0;
+    players[id].lastAction = null;
+    players[id].lastActionAmount = null;
   });
   dealer.maxBet = 0;
   dealer.currentTurn = 0;
