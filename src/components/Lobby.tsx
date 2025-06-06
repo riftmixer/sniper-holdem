@@ -23,14 +23,14 @@ function Lobby() {
     const playerRef = ref(db, `games/${gameId}/players/${id}`);
     const snap = await get(playerRef);
     if (!snap.exists()) {
-      await set(playerRef, {
-        name,
-        chips: 60,
-        hand: [],
-        snipedPrediction: null,
+    await set(playerRef, {
+      name,
+      chips: 60,
+      hand: [],
+      snipedPrediction: null,
         folded: false,
         hasActed: false,
-      });
+    });
     }
     alert(`Joined game as ${name}`);
   };
