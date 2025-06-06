@@ -255,6 +255,14 @@ export default function Game({ gameId, playerId }: GameProps) {
     const canRaise = betInput > toCall && betInput <= currentPlayer.chips;
     const isFirstToAct = maxBet === 0;
 
+    // Unified bet handler for both Bet and Call
+    const handleCall = async () => {
+      if (canCall) {
+        await submitBet(gameId, playerId, toCall);
+        setBetInput(0);
+      }
+    };
+
     return (
       <div className="mt-4 space-y-4">
         {/* Betting Controls */}
@@ -289,12 +297,7 @@ export default function Game({ gameId, playerId }: GameProps) {
               ) : (
                 <>
                   <button
-                    onClick={async () => {
-                      if (canCall) {
-                        await submitBet(gameId, playerId, toCall);
-                        setBetInput(0);
-                      }
-                    }}
+                    onClick={handleCall}
                     className="bg-green-500 hover:bg-green-600 text-white px-4 py-1 rounded"
                     disabled={!canCall}
                   >
