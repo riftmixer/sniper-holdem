@@ -78,6 +78,8 @@ document.head.appendChild(styleSheet);
 const TABLE_RADIUS = 220; // px
 const SEAT_RADIUS = 300; // px (distance from table center)
 const TABLE_SIZE = 500; // px
+// Use a build-time injected timestamp if available, otherwise fallback to now (for dev)
+const BUILD_TIMESTAMP = process.env.REACT_APP_BUILD_TIMESTAMP || new Date().toISOString();
 
 function getSeatPositions(numPlayers: number) {
   // Dynamically adjust seat radius and size for small tables
@@ -325,18 +327,30 @@ export default function Game({ gameId, playerId }: GameProps) {
 
   const renderControls = () => {
     if (!dealer || !isMyTurn || players[playerId]?.folded) return null;
-
     const currentPlayer = players[playerId];
     if (!currentPlayer || currentPlayer.hasActed) return null;
-
     const maxBet = dealer.maxBet || 0;
     const myBet = currentPlayer.bet || 0;
     const toCall = maxBet - myBet;
     const isFirstToAct = maxBet === 0;
-
+    let min = 1;
+    let max = currentPlayer.chips;
+    if (!isFirstToAct) {
+      if (toCall > 0) {
+        // Not first to act, must call or raise
+        min = toCall;
+        if (myBet + toCall === maxBet && currentPlayer.chips >= toCall) {
+          // Only call is possible if player can't raise
+          max = toCall;
+        } else {
+          // Raise: min is maxBet+1, max is player's chips + myBet
+          min = Math.max(toCall, maxBet + 1);
+          max = currentPlayer.chips + myBet;
+        }
+      }
+    }
     return (
       <div className="mt-4 space-y-4">
-        {/* Betting Controls */}
         {(dealer.phase === 'bet1' || dealer.phase === 'bet2') && (
           <div>
             <div className="flex gap-2 items-center mb-2">
@@ -344,15 +358,15 @@ export default function Game({ gameId, playerId }: GameProps) {
                 type="number"
                 value={betInput}
                 onChange={(e) => setBetInput(Number(e.target.value))}
-                min={Math.max(1, isFirstToAct ? 1 : toCall)}
-                max={currentPlayer.chips}
+                min={min}
+                max={max}
                 className="w-24 px-2 py-1 border rounded text-black"
                 placeholder={isFirstToAct ? 'Bet amount' : 'Call or raise'}
               />
               <button
                 onClick={handleBetOrCall}
-                className={`bg-blue-500 hover:bg-blue-600 text-white px-4 py-1 rounded ${betInput < Math.max(1, isFirstToAct ? 1 : toCall) || betInput > currentPlayer.chips ? 'opacity-50 cursor-not-allowed' : ''}`}
-                disabled={betInput < Math.max(1, isFirstToAct ? 1 : toCall) || betInput > currentPlayer.chips}
+                className={`bg-blue-500 hover:bg-blue-600 text-white px-4 py-1 rounded ${betInput < min || betInput > max ? 'opacity-50 cursor-not-allowed' : ''}`}
+                disabled={betInput < min || betInput > max}
               >
                 {isFirstToAct ? 'Bet' : betInput === toCall ? `Call ${toCall}` : 'Raise'}
               </button>
@@ -541,7 +555,7 @@ export default function Game({ gameId, playerId }: GameProps) {
       </div>
       {renderRoundHistory()}
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold mb-4">🔥 Sniper Hold'em v2 🔥</h1>
+        <h1 className="text-3xl font-bold mb-4">🔥 Sniper Hold'em v2 <span className='text-sm text-yellow-400 ml-2'>{BUILD_TIMESTAMP}</span> 🔥</h1>
         {renderPokerTable()}
         {/* Controls below the table, with extra margin */}
         <div className="flex justify-center mt-12">

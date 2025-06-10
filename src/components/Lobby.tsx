@@ -4,6 +4,9 @@ import { ref, set, onValue, get } from 'firebase/database';
 import { startGame } from './Dealer';
 import Game from './Game';
 
+// Use a build-time injected timestamp if available, otherwise fallback to now (for dev)
+const BUILD_TIMESTAMP = process.env.REACT_APP_BUILD_TIMESTAMP || new Date().toISOString();
+
 function generatePlayerId() {
   return 'player_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
 }
@@ -63,7 +66,7 @@ function Lobby() {
     <Game gameId={gameId} playerId={playerId} />
   ) : (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold mb-4">🔥 Sniper Hold'em v2 🔥</h1>
+      <h1 className="text-2xl font-bold mb-4">🔥 Sniper Hold'em v2 <span className='text-sm text-yellow-400 ml-2'>{BUILD_TIMESTAMP}</span> 🔥</h1>
       <input
         className="border p-2 w-full"
         onChange={(e) => setName(e.target.value)}
