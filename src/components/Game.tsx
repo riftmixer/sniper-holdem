@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { db } from '../firebase';
 import { ref, onValue } from 'firebase/database';
-import { submitBet, foldPlayer, submitSnipe, startGame } from './Dealer';
+import { submitBet, submitSnipe, startGame } from './Dealer';
 
 type Player = {
   id: string;
