@@ -84,6 +84,8 @@ type DealerState = {
     chips: Record<string, number>;
     phase: string;
   }>;
+  currentBet?: number;
+  acted?: Record<string, boolean>;
 };
 
 function logAction(dealer: any, players: any, entry: { playerId?: string, action: string, amount?: number, phase?: string }) {
@@ -149,125 +151,87 @@ export async function startGame(gameId: string) {
   await update(gameRef, updates);
 }
 
-export async function submitBet(gameId: string, playerId: string, amount: number) {
+// Helper: Get next active player index
+function getNextActivePlayerIdx(turnOrder: string[], players: any, startIdx: number): number {
+  let idx = (startIdx + 1) % turnOrder.length;
+  let safety = 0;
+  while (players[turnOrder[idx]].folded && safety++ < turnOrder.length) {
+    idx = (idx + 1) % turnOrder.length;
+  }
+  return idx;
+}
+
+export async function submitBet(gameId: string, playerId: string, action: 'fold' | 'check' | 'call' | 'raise', amount?: number) {
   const gameRef = ref(db, `games/${gameId}`);
   const snap = await get(gameRef);
   const game = snap.val();
   const dealer = game.dealer;
   const players = game.players;
-
-  // Validation checks
   if (!dealer || !players[playerId]) return;
-  if (dealer.turnOrder[dealer.currentTurn] !== playerId) return; // Only current player can act
+  if (dealer.turnOrder[dealer.currentTurn] !== playerId) return;
   if (players[playerId].folded) return;
-  if (amount < 1) return;
 
-  const currentBet = players[playerId].bet || 0;
-  const prevMaxBet = dealer.maxBet || 0;
-  const isFirstToAct = prevMaxBet === 0;
-  const playerChips = players[playerId].chips;
+  let currentBet = dealer.currentBet || 0;
+  let player = players[playerId];
+  let toCall = currentBet - (player.bet || 0);
 
-  let diff = 0;
-  let totalBet = currentBet;
-
-  if (isFirstToAct) {
-    // First bet of the round: can bet any amount between 1 and player's chips
-    if (amount < 1 || amount > playerChips) {
-      console.log(`[submitBet] Invalid first bet. amount=${amount}, chips=${playerChips}`);
-      return;
-    }
-    diff = amount;
-    totalBet = amount;
-    players[playerId].lastAction = 'bet';
-    players[playerId].lastActionAmount = amount;
-  } else {
-    // Not first to act: must call or raise
-    const toCall = prevMaxBet - currentBet;
-    if (amount === prevMaxBet) {
-      // Call
-      if (toCall < 1 || toCall > playerChips) {
-        console.log(`[submitBet] Invalid call. toCall=${toCall}, chips=${playerChips}`);
-        return;
-      }
-      diff = toCall;
-      totalBet = prevMaxBet;
-      players[playerId].lastAction = 'call';
-      players[playerId].lastActionAmount = toCall;
-    } else if (amount > prevMaxBet) {
-      // Raise: must be at least 1 more than maxBet
-      if (amount > playerChips + currentBet) {
-        console.log(`[submitBet] Raise amount greater than chips. amount=${amount}, chips=${playerChips}, currentBet=${currentBet}`);
-        return;
-      }
-      if (amount < prevMaxBet + 1) {
-        console.log(`[submitBet] Raise must be at least 1 more than maxBet. amount=${amount}, maxBet=${prevMaxBet}`);
-        return;
-      }
-      diff = amount - currentBet;
-      totalBet = amount;
-      players[playerId].lastAction = 'raise';
-      players[playerId].lastActionAmount = diff;
-    } else {
-      // Invalid action (bet less than call)
-      console.log(`[submitBet] Invalid action. amount=${amount}, must be at least call (${prevMaxBet}) or raise.`);
-      return;
-    }
+  if (action === 'fold') {
+    player.folded = true;
+    player.lastAction = 'fold';
+    player.lastActionAmount = 0;
+  } else if (action === 'check') {
+    if (currentBet !== (player.bet || 0)) return; // Can only check if no bet to call
+    player.lastAction = 'check';
+    player.lastActionAmount = 0;
+  } else if (action === 'call') {
+    if (toCall < 0) toCall = 0;
+    if (player.chips < toCall) return;
+    player.chips -= toCall;
+    player.bet = (player.bet || 0) + toCall;
+    dealer.pot = (dealer.pot || 0) + toCall;
+    player.lastAction = 'call';
+    player.lastActionAmount = toCall;
+  } else if (action === 'raise') {
+    if (typeof amount !== 'number' || amount <= toCall) return;
+    const raiseAmount = amount - (player.bet || 0);
+    if (raiseAmount <= toCall) return;
+    if (player.chips < raiseAmount) return;
+    player.chips -= raiseAmount;
+    player.bet = (player.bet || 0) + raiseAmount;
+    dealer.pot = (dealer.pot || 0) + raiseAmount;
+    dealer.currentBet = player.bet;
+    player.lastAction = 'raise';
+    player.lastActionAmount = raiseAmount;
+    // When a raise happens, all non-folded players except raiser must act again
+    dealer.acted = {[playerId]: true};
   }
 
-  // Deduct chips and update bet
-  if (diff < 1 || diff > players[playerId].chips) {
-    console.log(`[submitBet] Invalid chip deduction. diff=${diff}, chips=${players[playerId].chips}`);
+  // Mark player as acted
+  if (!dealer.acted) dealer.acted = {};
+  dealer.acted[playerId] = true;
+
+  // Advance turn
+  let nextIdx = getNextActivePlayerIdx(dealer.turnOrder, players, dealer.currentTurn);
+  dealer.currentTurn = nextIdx;
+
+  // If all non-folded players have acted and matched the bet, end betting round
+  const activePids = dealer.turnOrder.filter((pid: string) => !players[pid].folded && players[pid].chips > 0);
+  const allActed = activePids.every((pid: string) => dealer.acted[pid] && players[pid].bet === (dealer.currentBet || 0));
+  if (allActed || activePids.length === 1) {
+    // Reset bets for next round, except for all-in players
+    for (const pid of dealer.turnOrder as string[]) {
+      if (!players[pid].folded && players[pid].chips > 0) {
+        players[pid].bet = 0;
+      }
+    }
+    dealer.currentBet = 0;
+    dealer.acted = {};
+    // Advance phase
+    await advancePhase(gameId);
     return;
   }
-  players[playerId].chips -= diff;
-  players[playerId].bet = totalBet;
-  players[playerId].hasActed = true;
-
-  // Update pot and max bet
-  dealer.pot = (dealer.pot || 0) + diff;
-  if (totalBet > prevMaxBet) {
-    dealer.maxBet = totalBet;
-    // Reset hasActed for all players who haven't folded
-    Object.keys(players).forEach((pid: string) => {
-      if (!players[pid].folded) {
-        players[pid].hasActed = false;
-      }
-    });
-    players[playerId].hasActed = true; // Current player has acted
-  }
-
-  // Always log the action after updating state
-  logAction(dealer, players, {
-    playerId,
-    action: players[playerId].lastAction || 'bet',
-    amount: players[playerId].lastActionAmount,
-  });
-
-  // Advance turn to next active player who hasn't acted
-  const activePlayers = dealer.turnOrder.filter((id: string) => !players[id].folded);
-  let nextTurn = (dealer.currentTurn + 1) % activePlayers.length;
-  let safety = 0;
-  while (
-    safety++ < activePlayers.length && 
-    (players[activePlayers[nextTurn]].hasActed || 
-     players[activePlayers[nextTurn]].bet >= dealer.maxBet)
-  ) {
-    nextTurn = (nextTurn + 1) % activePlayers.length;
-  }
-
-  dealer.currentTurn = nextTurn;
 
   await update(gameRef, { dealer, players });
-
-  // Now check if all players have acted and advance phase if needed
-  const allActed = activePlayers.every((id: string) => 
-    players[id].hasActed || 
-    players[id].bet >= dealer.maxBet || 
-    players[id].chips === 0
-  );
-  if (allActed) {
-    await advancePhase(gameId);
-  }
 }
 
 export async function foldPlayer(gameId: string, playerId: string) {

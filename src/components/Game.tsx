@@ -209,17 +209,17 @@ export default function Game({ gameId, playerId }: GameProps) {
     }
   }, [isMyTurn, dealer, players, playerId]);
 
-  const handleBetOrCall = async () => {
-    if (betInput < 1) {
-      setError('Bet must be at least 1');
-      return;
-    }
+  const handleBetOrCall = async (action: 'fold' | 'check' | 'call' | 'raise') => {
     try {
-      await submitBet(gameId, playerId, betInput);
-      setBetInput(0);
+      if (action === 'raise') {
+        await submitBet(gameId, playerId, 'raise', betInput);
+        setBetInput(0);
+      } else {
+        await submitBet(gameId, playerId, action);
+      }
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to submit bet');
+      setError(err instanceof Error ? err.message : 'Failed to submit action');
     }
   };
 
@@ -329,55 +329,60 @@ export default function Game({ gameId, playerId }: GameProps) {
   const renderControls = () => {
     if (!dealer || !isMyTurn || players[playerId]?.folded) return null;
     const currentPlayer = players[playerId];
-    if (!currentPlayer || currentPlayer.hasActed) return null;
-    const maxBet = dealer.maxBet || 0;
+    if (!currentPlayer) return null;
+    const currentBet = dealer.currentBet || 0;
     const myBet = currentPlayer.bet || 0;
-    let toCall = maxBet - myBet;
-    if (toCall < 1) toCall = 1;
-    const isFirstToAct = maxBet === 0;
-    let min = 1;
-    let max = currentPlayer.chips;
-    if (!isFirstToAct) {
-      if (toCall > 0) {
-        // Not first to act, must call or raise
-        min = toCall;
-        if (myBet + toCall === maxBet && currentPlayer.chips >= toCall) {
-          // Only call is possible if player can't raise
-          max = toCall;
-        } else {
-          // Raise: min is maxBet+1, max is player's chips + myBet
-          min = Math.max(toCall, maxBet + 1);
-          max = currentPlayer.chips + myBet;
-        }
-      }
-    }
+    const toCall = currentBet - myBet;
+    const canCheck = toCall === 0;
+    const canCall = toCall > 0 && currentPlayer.chips >= toCall;
+    const canRaise = currentPlayer.chips > toCall;
     return (
       <div className="mt-4 space-y-4">
         {(dealer.phase === 'bet1' || dealer.phase === 'bet2') && (
           <div>
             <div className="flex gap-2 items-center mb-2">
-              <input
-                type="number"
-                value={betInput}
-                onChange={(e) => setBetInput(Number(e.target.value))}
-                min={min}
-                max={max}
-                className="w-24 px-2 py-1 border rounded text-black"
-                placeholder={isFirstToAct ? 'Bet amount' : 'Call or raise'}
-              />
               <button
-                onClick={handleBetOrCall}
-                className={`bg-blue-500 hover:bg-blue-600 text-white px-4 py-1 rounded ${betInput < min || betInput > max ? 'opacity-50 cursor-not-allowed' : ''}`}
-                disabled={betInput < min || betInput > max}
-              >
-                {isFirstToAct ? 'Bet' : betInput === toCall ? `Call ${toCall}` : 'Raise'}
-              </button>
-              <button
-                onClick={handleFold}
+                onClick={() => handleBetOrCall('fold')}
                 className="bg-red-500 hover:bg-red-600 text-white px-4 py-1 rounded"
               >
                 Fold
               </button>
+              {canCheck && (
+                <button
+                  onClick={() => handleBetOrCall('check')}
+                  className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-1 rounded"
+                >
+                  Check
+                </button>
+              )}
+              {canCall && (
+                <button
+                  onClick={() => handleBetOrCall('call')}
+                  className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-1 rounded"
+                >
+                  Call {toCall}
+                </button>
+              )}
+              {canRaise && (
+                <>
+                  <input
+                    type="number"
+                    value={betInput}
+                    onChange={e => setBetInput(Number(e.target.value))}
+                    min={toCall + 1}
+                    max={currentPlayer.chips + myBet}
+                    className="w-24 px-2 py-1 border rounded text-black"
+                    placeholder="Raise to..."
+                  />
+                  <button
+                    onClick={() => handleBetOrCall('raise')}
+                    className={`bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-1 rounded ${betInput <= toCall || betInput > currentPlayer.chips + myBet ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    disabled={betInput <= toCall || betInput > currentPlayer.chips + myBet}
+                  >
+                    Raise
+                  </button>
+                </>
+              )}
             </div>
             {error && <div className="text-red-500 text-sm">{error}</div>}
           </div>
