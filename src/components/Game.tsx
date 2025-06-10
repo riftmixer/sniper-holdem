@@ -53,6 +53,7 @@ type DealerState = {
     chips: Record<string, number>;
     pot: number;
   }>;
+  currentBet?: number;
 };
 
 type GameProps = {
@@ -220,15 +221,6 @@ export default function Game({ gameId, playerId }: GameProps) {
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to submit action');
-    }
-  };
-
-  const handleFold = async () => {
-    try {
-      await foldPlayer(gameId, playerId);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fold');
     }
   };
 
