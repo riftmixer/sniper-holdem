@@ -164,22 +164,16 @@ export async function submitBet(gameId: string, playerId: string, amount: number
 
   const currentBet = players[playerId].bet || 0;
   const prevMaxBet = dealer.maxBet || 0;
-  const toCall = prevMaxBet - currentBet;
   const isFirstToAct = prevMaxBet === 0;
-
-  // Prevent acting if already matched the max bet (unless it's the first bet of the round)
-  if (!isFirstToAct && currentBet >= prevMaxBet) {
-    console.log(`[submitBet] Player ${playerId} already matched max bet. currentBet=${currentBet}, maxBet=${prevMaxBet}`);
-    return;
-  }
+  const playerChips = players[playerId].chips;
 
   let diff = 0;
   let totalBet = currentBet;
 
   if (isFirstToAct) {
-    // First bet of the round
-    if (amount <= 0 || amount > players[playerId].chips) {
-      console.log(`[submitBet] Invalid first bet. amount=${amount}, chips=${players[playerId].chips}`);
+    // First bet of the round: can bet any amount between 1 and player's chips
+    if (amount < 1 || amount > playerChips) {
+      console.log(`[submitBet] Invalid first bet. amount=${amount}, chips=${playerChips}`);
       return;
     }
     diff = amount;
@@ -187,35 +181,45 @@ export async function submitBet(gameId: string, playerId: string, amount: number
     players[playerId].lastAction = 'bet';
     players[playerId].lastActionAmount = amount;
   } else {
-    // Not first to act: determine if call or raise
-    if (amount === toCall) {
-      // This is a call
-      if (toCall <= 0 || toCall > players[playerId].chips) {
-        console.log(`[submitBet] Invalid call. toCall=${toCall}, chips=${players[playerId].chips}`);
+    // Not first to act: must call or raise
+    const toCall = prevMaxBet - currentBet;
+    if (amount === prevMaxBet) {
+      // Call
+      if (toCall < 1 || toCall > playerChips) {
+        console.log(`[submitBet] Invalid call. toCall=${toCall}, chips=${playerChips}`);
         return;
       }
       diff = toCall;
-      totalBet = currentBet + toCall;
+      totalBet = prevMaxBet;
       players[playerId].lastAction = 'call';
       players[playerId].lastActionAmount = toCall;
-    } else if (amount > toCall) {
-      // This is a raise
-      if (amount > players[playerId].chips) {
-        console.log(`[submitBet] Amount greater than chips. amount=${amount}, chips=${players[playerId].chips}`);
+    } else if (amount > prevMaxBet) {
+      // Raise: must be at least 1 more than maxBet
+      const raiseAmount = amount - currentBet;
+      if (amount > playerChips + currentBet) {
+        console.log(`[submitBet] Raise amount greater than chips. amount=${amount}, chips=${playerChips}, currentBet=${currentBet}`);
         return;
       }
-      diff = amount;
-      totalBet = currentBet + amount;
+      if (amount < prevMaxBet + 1) {
+        console.log(`[submitBet] Raise must be at least 1 more than maxBet. amount=${amount}, maxBet=${prevMaxBet}`);
+        return;
+      }
+      diff = amount - currentBet;
+      totalBet = amount;
       players[playerId].lastAction = 'raise';
-      players[playerId].lastActionAmount = amount;
+      players[playerId].lastActionAmount = diff;
     } else {
-      // Invalid action
-      console.log(`[submitBet] Invalid action. amount=${amount}, toCall=${toCall}`);
+      // Invalid action (bet less than call)
+      console.log(`[submitBet] Invalid action. amount=${amount}, must be at least call (${prevMaxBet}) or raise.`);
       return;
     }
   }
 
   // Deduct chips and update bet
+  if (diff < 1 || diff > players[playerId].chips) {
+    console.log(`[submitBet] Invalid chip deduction. diff=${diff}, chips=${players[playerId].chips}`);
+    return;
+  }
   players[playerId].chips -= diff;
   players[playerId].bet = totalBet;
   players[playerId].hasActed = true;
