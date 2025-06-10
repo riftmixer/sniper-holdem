@@ -195,7 +195,6 @@ export async function submitBet(gameId: string, playerId: string, amount: number
       players[playerId].lastActionAmount = toCall;
     } else if (amount > prevMaxBet) {
       // Raise: must be at least 1 more than maxBet
-      const raiseAmount = amount - currentBet;
       if (amount > playerChips + currentBet) {
         console.log(`[submitBet] Raise amount greater than chips. amount=${amount}, chips=${playerChips}, currentBet=${currentBet}`);
         return;
