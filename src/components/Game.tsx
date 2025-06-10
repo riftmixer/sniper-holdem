@@ -197,7 +197,8 @@ export default function Game({ gameId, playerId }: GameProps) {
     if (!currentPlayer || currentPlayer.hasActed) return;
     const maxBet = dealer.maxBet || 0;
     const myBet = currentPlayer.bet || 0;
-    const toCall = maxBet - myBet;
+    let toCall = maxBet - myBet;
+    if (toCall < 1) toCall = 1;
     const isFirstToAct = maxBet === 0;
 
     if (!isFirstToAct && betInput !== toCall) {
@@ -331,7 +332,8 @@ export default function Game({ gameId, playerId }: GameProps) {
     if (!currentPlayer || currentPlayer.hasActed) return null;
     const maxBet = dealer.maxBet || 0;
     const myBet = currentPlayer.bet || 0;
-    const toCall = maxBet - myBet;
+    let toCall = maxBet - myBet;
+    if (toCall < 1) toCall = 1;
     const isFirstToAct = maxBet === 0;
     let min = 1;
     let max = currentPlayer.chips;
