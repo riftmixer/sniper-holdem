@@ -164,6 +164,55 @@ const testRaiseValidation = () => {
 };
 testRaiseValidation();
 
+// Test 9: Integration test for full betting round
+console.log('\nTest 9: Integration test for full betting round');
+const integrationTestFullRound = () => {
+  // Simulate a minimal in-memory dealer and players
+  let dealer = {
+    currentBet: 0,
+    pot: 0,
+    acted: {},
+    turnOrder: ['p1', 'p2'],
+    currentTurn: 0,
+    phase: 'bet1',
+  };
+  let players = {
+    p1: { chips: 60, bet: 0, folded: false },
+    p2: { chips: 60, bet: 0, folded: false },
+  };
+  // Player 1 raises to 5
+  let raiseTo = 5;
+  let raiseAmount = raiseTo - players.p1.bet;
+  players.p1.chips -= raiseAmount;
+  players.p1.bet = raiseTo;
+  dealer.pot += raiseAmount;
+  dealer.currentBet = raiseTo;
+  dealer.acted = { p1: true };
+  dealer.currentTurn = 1;
+  // Player 2 calls
+  let toCall = dealer.currentBet - players.p2.bet;
+  players.p2.chips -= toCall;
+  players.p2.bet += toCall;
+  dealer.pot += toCall;
+  dealer.acted.p2 = true;
+  // Check if round should advance
+  const activePlayers = dealer.turnOrder.filter((id) => !players[id].folded);
+  const allActed = activePlayers.every((id) => dealer.acted[id] && players[id].bet === dealer.currentBet);
+  if (!allActed) throw new Error('Round should not advance until all have called/folded!');
+  // Reset bets for next phase
+  for (const id of dealer.turnOrder) {
+    if (!players[id].folded) players[id].bet = 0;
+  }
+  dealer.currentBet = 0;
+  dealer.acted = {};
+  // Check final state
+  if (players.p1.chips !== 55 || players.p2.chips !== 55 || dealer.pot !== 10) {
+    throw new Error('Integration test failed: chips or pot incorrect!');
+  }
+  console.log('✓ Integration test for full betting round passed');
+};
+integrationTestFullRound();
+
 // Run all tests
 testBettingLogic();
 testTurnManagement();

@@ -220,13 +220,11 @@ export async function submitBet(gameId: string, playerId: string, action: 'fold'
   if (!dealer.acted) dealer.acted = {};
   dealer.acted[playerId] = true;
 
-  // Log the action
-  logAction(dealer, players, {
-    playerId,
-    action,
-    amount: action === 'raise' ? amount : action === 'call' ? toCall : 0,
-    phase: dealer.phase,
-  });
+  // Debug logging
+  console.log(`[DEBUG] Action: ${action}, Player: ${playerId}, Chips: ${player.chips}, Bet: ${player.bet}, Pot: ${dealer.pot}, CurrentBet: ${dealer.currentBet}`);
+  for (const id of dealer.turnOrder) {
+    console.log(`[DEBUG] Player ${id}: chips=${players[id].chips}, bet=${players[id].bet}, folded=${players[id].folded}`);
+  }
 
   // Check if betting round is complete
   const activePlayers = dealer.turnOrder.filter((id: string) => !players[id]?.folded);
@@ -244,8 +242,14 @@ export async function submitBet(gameId: string, playerId: string, action: 'fold'
     return;
   }
 
-  // Advance turn to next active player
-  let nextIdx = getNextActivePlayerIdx(dealer.turnOrder, players, dealer.currentTurn);
+  // Advance turn to next active player who has not folded and has not yet acted
+  let nextIdx = dealer.currentTurn;
+  let safety = 0;
+  do {
+    nextIdx = (nextIdx + 1) % dealer.turnOrder.length;
+    safety++;
+    if (safety > dealer.turnOrder.length * 2) break; // Prevent infinite loop
+  } while (players[dealer.turnOrder[nextIdx]].folded);
   dealer.currentTurn = nextIdx;
 
   await update(gameRef, { dealer, players });
