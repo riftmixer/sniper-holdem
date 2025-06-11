@@ -151,16 +151,6 @@ export async function startGame(gameId: string) {
   await update(gameRef, updates);
 }
 
-// Helper: Get next active player index
-function getNextActivePlayerIdx(turnOrder: string[], players: any, startIdx: number): number {
-  let idx = (startIdx + 1) % turnOrder.length;
-  let safety = 0;
-  while (players[turnOrder[idx]].folded && safety++ < turnOrder.length) {
-    idx = (idx + 1) % turnOrder.length;
-  }
-  return idx;
-}
-
 export async function submitBet(gameId: string, playerId: string, action: 'fold' | 'check' | 'call' | 'raise', amount?: number) {
   const gameRef = ref(db, `games/${gameId}`);
   const snap = await get(gameRef);
