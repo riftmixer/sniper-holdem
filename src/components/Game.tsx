@@ -42,7 +42,7 @@ type DealerState = {
   turnOrder: string[];
   communityCards: number[];
   pot: number;
-  maxBet: number;
+  currentBet: number;
   draws: Record<string, number>;
   roundNumber: number;
   roundResults: RoundResult[];
@@ -53,7 +53,7 @@ type DealerState = {
     chips: Record<string, number>;
     pot: number;
   }>;
-  currentBet?: number;
+  acted?: Record<string, boolean>;
 };
 
 type GameProps = {
@@ -196,11 +196,11 @@ export default function Game({ gameId, playerId }: GameProps) {
     if (!isMyTurn || !dealer || !players) return;
     const currentPlayer = players[playerId];
     if (!currentPlayer || currentPlayer.hasActed) return;
-    const maxBet = dealer.maxBet || 0;
+    const currentBet = dealer.currentBet || 0;
     const myBet = currentPlayer.bet || 0;
-    let toCall = maxBet - myBet;
-    if (toCall < 1) toCall = 1;
-    const isFirstToAct = maxBet === 0;
+    let toCall = currentBet - myBet;
+    if (toCall < 0) toCall = 0;
+    const isFirstToAct = currentBet === 0;
 
     if (!isFirstToAct && betInput !== toCall) {
       setBetInput(toCall);
@@ -322,12 +322,14 @@ export default function Game({ gameId, playerId }: GameProps) {
     if (!dealer || !isMyTurn || players[playerId]?.folded) return null;
     const currentPlayer = players[playerId];
     if (!currentPlayer) return null;
+    
     const currentBet = dealer.currentBet || 0;
     const myBet = currentPlayer.bet || 0;
     const toCall = currentBet - myBet;
     const canCheck = toCall === 0;
     const canCall = toCall > 0 && currentPlayer.chips >= toCall;
     const canRaise = currentPlayer.chips > toCall;
+    
     return (
       <div className="mt-4 space-y-4">
         {(dealer.phase === 'bet1' || dealer.phase === 'bet2') && (

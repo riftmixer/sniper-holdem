@@ -72,7 +72,7 @@ type DealerState = {
   turnOrder: string[];
   communityCards: number[];
   pot: number;
-  maxBet: number;
+  currentBet: number;
   draws: Record<string, number>;
   roundNumber: number;
   roundResults: RoundResult[];
@@ -84,8 +84,7 @@ type DealerState = {
     chips: Record<string, number>;
     phase: string;
   }>;
-  currentBet?: number;
-  acted?: Record<string, boolean>;
+  acted: Record<string, boolean>;
 };
 
 function logAction(dealer: any, players: any, entry: { playerId?: string, action: string, amount?: number, phase?: string }) {
@@ -131,7 +130,7 @@ export async function startGame(gameId: string) {
   const communityCards = [getRandomCard(deck), getRandomCard(deck)];
   const newState: DealerState = {
     communityCards,
-    maxBet: 0,
+    currentBet: 0,
     pot: 0,
     phase: 'bet1',
     currentTurn: 0,
@@ -140,6 +139,7 @@ export async function startGame(gameId: string) {
     roundNumber: (dealer.roundNumber || 0) + 1,
     roundResults: dealer.roundResults || [],
     actionHistory: [],
+    acted: {},
   };
 
   // Deal initial hands
@@ -167,69 +167,89 @@ export async function submitBet(gameId: string, playerId: string, action: 'fold'
   const game = snap.val();
   const dealer = game.dealer;
   const players = game.players;
+  
+  // Validation
   if (!dealer || !players[playerId]) return;
   if (dealer.turnOrder[dealer.currentTurn] !== playerId) return;
   if (players[playerId].folded) return;
+  if (dealer.phase !== 'bet1' && dealer.phase !== 'bet2') return;
 
-  let currentBet = dealer.currentBet || 0;
-  let player = players[playerId];
-  let toCall = currentBet - (player.bet || 0);
+  const player = players[playerId];
+  const currentBet = dealer.currentBet || 0;
+  const playerBet = player.bet || 0;
+  const toCall = currentBet - playerBet;
 
+  // Validate action
+  if (action === 'check' && toCall > 0) return; // Can't check when there's a bet to call
+  if (action === 'call' && player.chips < toCall) return; // Can't call with insufficient chips
+  if (action === 'raise') {
+    if (typeof amount !== 'number' || amount <= currentBet) return;
+    const raiseAmount = amount - playerBet;
+    if (player.chips < raiseAmount) return;
+  }
+
+  // Execute action
   if (action === 'fold') {
     player.folded = true;
     player.lastAction = 'fold';
     player.lastActionAmount = 0;
   } else if (action === 'check') {
-    if (currentBet !== (player.bet || 0)) return; // Can only check if no bet to call
     player.lastAction = 'check';
     player.lastActionAmount = 0;
   } else if (action === 'call') {
-    if (toCall < 0) toCall = 0;
-    if (player.chips < toCall) return;
-    player.chips -= toCall;
-    player.bet = (player.bet || 0) + toCall;
-    dealer.pot = (dealer.pot || 0) + toCall;
+    const callAmount = Math.min(toCall, player.chips);
+    player.chips -= callAmount;
+    player.bet = playerBet + callAmount;
+    dealer.pot += callAmount;
     player.lastAction = 'call';
-    player.lastActionAmount = toCall;
+    player.lastActionAmount = callAmount;
   } else if (action === 'raise') {
-    if (typeof amount !== 'number' || amount <= toCall) return;
-    const raiseAmount = amount - (player.bet || 0);
-    if (raiseAmount <= toCall) return;
-    if (player.chips < raiseAmount) return;
+    const raiseAmount = amount! - playerBet;
     player.chips -= raiseAmount;
-    player.bet = (player.bet || 0) + raiseAmount;
-    dealer.pot = (dealer.pot || 0) + raiseAmount;
-    dealer.currentBet = player.bet;
+    player.bet = amount!;
+    dealer.pot += raiseAmount;
+    dealer.currentBet = amount!;
     player.lastAction = 'raise';
     player.lastActionAmount = raiseAmount;
-    // When a raise happens, all non-folded players except raiser must act again
-    dealer.acted = {[playerId]: true};
+    
+    // When someone raises, reset acted status for all players except the raiser
+    dealer.acted = { [playerId]: true };
   }
 
   // Mark player as acted
   if (!dealer.acted) dealer.acted = {};
   dealer.acted[playerId] = true;
 
-  // Advance turn
-  let nextIdx = getNextActivePlayerIdx(dealer.turnOrder, players, dealer.currentTurn);
-  dealer.currentTurn = nextIdx;
+  // Log the action
+  logAction(dealer, players, {
+    playerId,
+    action,
+    amount: action === 'raise' ? amount : action === 'call' ? toCall : 0,
+    phase: dealer.phase,
+  });
 
-  // If all non-folded players have acted and matched the bet, end betting round
-  const activePids = dealer.turnOrder.filter((pid: string) => !players[pid].folded && players[pid].chips > 0);
-  const allActed = activePids.every((pid: string) => dealer.acted[pid] && players[pid].bet === (dealer.currentBet || 0));
-  if (allActed || activePids.length === 1) {
-    // Reset bets for next round, except for all-in players
-    for (const pid of dealer.turnOrder as string[]) {
-      if (!players[pid].folded && players[pid].chips > 0) {
-        players[pid].bet = 0;
+  // Check if betting round is complete
+  const activePlayers = dealer.turnOrder.filter((id: string) => !players[id]?.folded);
+  const allActed = activePlayers.every((id: string) => dealer.acted[id] && players[id].bet === dealer.currentBet);
+  
+  if (allActed || activePlayers.length === 1) {
+    // Reset bets for next phase
+    for (const id of dealer.turnOrder) {
+      if (!players[id].folded) {
+        players[id].bet = 0;
       }
     }
     dealer.currentBet = 0;
     dealer.acted = {};
-    // Advance phase
+    
+    // Advance to next phase
     await advancePhase(gameId);
     return;
   }
+
+  // Advance turn to next active player
+  let nextIdx = getNextActivePlayerIdx(dealer.turnOrder, players, dealer.currentTurn);
+  dealer.currentTurn = nextIdx;
 
   await update(gameRef, { dealer, players });
 }
@@ -266,30 +286,57 @@ export async function submitSnipe(gameId: string, playerId: string, prediction: 
   const game = snap.val();
   const dealer = game.dealer;
   const players = game.players;
+  
+  // Validation
+  if (!dealer || !players[playerId]) return;
+  if (dealer.phase !== 'snipe') return;
   if (dealer.turnOrder[dealer.currentTurn] !== playerId) return;
+  if (players[playerId].folded) return;
+  if (players[playerId].snipedPrediction) return; // Already sniped
+  
+  // Validate prediction
+  const validPredictions = ['high card', 'pair', 'two pair', 'three of a kind', 'straight', 'full house', 'four of a kind'];
+  if (!validPredictions.includes(prediction)) return;
+
+  // Submit snipe
   players[playerId].snipedPrediction = prediction;
-  players[playerId].hasActed = true;
-  // Advance turn
-  const totalPlayers = dealer.turnOrder.length;
-  let nextTurn = (dealer.currentTurn + 1) % totalPlayers;
-  let safety = 0;
-  while ((players[dealer.turnOrder[nextTurn]]?.folded || players[dealer.turnOrder[nextTurn]]?.hasActed) && safety++ < totalPlayers) {
-    nextTurn = (nextTurn + 1) % totalPlayers;
-  }
-  dealer.currentTurn = nextTurn;
+  players[playerId].lastAction = 'snipe';
+  players[playerId].lastActionAmount = 0;
+
+  // Log the action
+  logAction(dealer, players, {
+    playerId,
+    action: 'snipe',
+    amount: 0,
+    phase: dealer.phase,
+  });
 
   // Check if all active players have sniped
-  const activePlayers = dealer.turnOrder.filter((id: string) => !players[id]?.folded);
-  const allSniped = activePlayers.every((id: string) => players[id]?.snipedPrediction);
-  await update(gameRef, { dealer, players });
+  const activePlayers = dealer.turnOrder.filter((id: string) => !players[id].folded);
+  const allSniped = activePlayers.every((id: string) => players[id].snipedPrediction);
+  
   if (allSniped) {
-    await advancePhase(gameId);
+    // All active players have sniped, resolve the round
+    await resolveBets(gameId);
+    return;
   }
+
+  // Advance turn to next active player who hasn't sniped
+  let nextIdx = (dealer.currentTurn + 1) % dealer.turnOrder.length;
+  let safety = 0;
+  while ((players[dealer.turnOrder[nextIdx]]?.folded || 
+          players[dealer.turnOrder[nextIdx]]?.snipedPrediction) && 
+         safety++ < dealer.turnOrder.length) {
+    nextIdx = (nextIdx + 1) % dealer.turnOrder.length;
+  }
+  dealer.currentTurn = nextIdx;
+
+  await update(gameRef, { dealer, players });
 }
 
-export function checkBetsComplete(players: any, maxBet: number): boolean {
+export function checkBetsComplete(players: any, currentBet: number): boolean {
   return Object.values(players).every((p: any) => {
-    return p.folded || (typeof p.bet === 'number' && p.bet === maxBet);
+    return p.folded || (typeof p.bet === 'number' && p.bet === currentBet);
   });
 }
 
@@ -400,9 +447,10 @@ export async function resolveBets(gameId: string) {
 
   // Reset game state for next round
   dealer.pot = 0;
-  dealer.maxBet = 0;
+  dealer.currentBet = 0;
   dealer.phase = 'bet1';
   dealer.currentTurn = 0;
+  dealer.acted = {};
 
   // Reset player states
   for (const id in players) {
@@ -414,22 +462,8 @@ export async function resolveBets(gameId: string) {
     players[id].lastActionAmount = null;
   }
 
-  if (dealer.phase === 'snipe') {
-    await resolveBets(gameId);
-    // Start new round
-    await startNewRound(gameId);
-    return;
-  }
-  if (dealer.phase === 'bet1') {
-    dealer.actionHistory = [];
-  }
-
-  logAction(dealer, players, {
-    action: 'phase',
-    phase: dealer.phase,
-  });
-
-  await update(gameRef, { dealer, players });
+  // Start new round
+  await startNewRound(gameId);
 }
 
 export async function startNewRound(gameId: string) {
@@ -441,11 +475,10 @@ export async function startNewRound(gameId: string) {
 
   // Reset game state for next round
   dealer.pot = 0;
-  dealer.maxBet = 0;
+  dealer.currentBet = 0;
   dealer.phase = 'bet1';
   dealer.currentTurn = 0;
-  dealer.winningHand = null;
-  dealer.snipeResults = null;
+  dealer.acted = {};
 
   // Reset player states
   for (const id in players) {
@@ -457,7 +490,7 @@ export async function startNewRound(gameId: string) {
     players[id].lastActionAmount = null;
   }
 
-  // Start new game with updated chip counts
+  // Start new round
   await startGame(gameId);
 }
 
@@ -473,13 +506,12 @@ export async function advancePhase(gameId: string) {
   // Reset player states for new phase
   Object.keys(players).forEach((id: string) => {
     players[id].hasActed = false;
-    // DO NOT reset bets here!
-    // players[id].bet = 0;
     players[id].lastAction = null;
     players[id].lastActionAmount = null;
   });
-  dealer.maxBet = 0;
+  dealer.currentBet = 0;
   dealer.currentTurn = 0;
+  dealer.acted = {};
 
   // Phase progression logic
   switch (dealer.phase) {
@@ -498,21 +530,9 @@ export async function advancePhase(gameId: string) {
       break;
     case 'snipe':
       await resolveBets(gameId);
-      // Start new round
-      await startNewRound(gameId);
       return;
     default:
       dealer.phase = 'bet1';
-  }
-
-  if (dealer.phase === 'snipe') {
-    await resolveBets(gameId);
-    // Start new round
-    await startNewRound(gameId);
-    return;
-  }
-  if (dealer.phase === 'bet1') {
-    dealer.actionHistory = [];
   }
 
   logAction(dealer, players, {
