@@ -167,7 +167,7 @@ export async function submitBet(gameId: string, playerId: string, action: 'fold'
   const game = snap.val();
   const dealer = game.dealer;
   const players = game.players;
-  
+
   // Validation
   if (!dealer || !players[playerId]) return;
   if (dealer.turnOrder[dealer.currentTurn] !== playerId) return;
@@ -183,8 +183,9 @@ export async function submitBet(gameId: string, playerId: string, action: 'fold'
   if (action === 'check' && toCall > 0) return; // Can't check when there's a bet to call
   if (action === 'call' && player.chips < toCall) return; // Can't call with insufficient chips
   if (action === 'raise') {
-    if (typeof amount !== 'number' || amount <= currentBet) return;
+    if (typeof amount !== 'number' || amount <= currentBet) return; // Must raise to strictly greater than current bet
     const raiseAmount = amount - playerBet;
+    if (raiseAmount <= toCall) return; // Must raise by at least 1 more than toCall
     if (player.chips < raiseAmount) return;
   }
 
@@ -211,7 +212,6 @@ export async function submitBet(gameId: string, playerId: string, action: 'fold'
     dealer.currentBet = amount!;
     player.lastAction = 'raise';
     player.lastActionAmount = raiseAmount;
-    
     // When someone raises, reset acted status for all players except the raiser
     dealer.acted = { [playerId]: true };
   }
@@ -231,9 +231,8 @@ export async function submitBet(gameId: string, playerId: string, action: 'fold'
   // Check if betting round is complete
   const activePlayers = dealer.turnOrder.filter((id: string) => !players[id]?.folded);
   const allActed = activePlayers.every((id: string) => dealer.acted[id] && players[id].bet === dealer.currentBet);
-  
   if (allActed || activePlayers.length === 1) {
-    // Reset bets for next phase
+    // Only advance if all active players have matched the bet or folded
     for (const id of dealer.turnOrder) {
       if (!players[id].folded) {
         players[id].bet = 0;
@@ -241,8 +240,6 @@ export async function submitBet(gameId: string, playerId: string, action: 'fold'
     }
     dealer.currentBet = 0;
     dealer.acted = {};
-    
-    // Advance to next phase
     await advancePhase(gameId);
     return;
   }
