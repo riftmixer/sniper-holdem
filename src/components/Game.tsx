@@ -135,6 +135,12 @@ export default function Game({ gameId, playerId }: GameProps) {
 
   useEffect(() => {
     if (!dealer || !players) return;
+    console.log('[DEBUG] Dealer state:', dealer);
+    console.log('[DEBUG] Players state:', players);
+  }, [dealer, players]);
+
+  useEffect(() => {
+    if (!dealer || !players) return;
     
     // Start the game if it's the first round and we have players
     if (dealer.roundNumber === 1 && Object.keys(players).length > 0) {
@@ -145,9 +151,11 @@ export default function Game({ gameId, playerId }: GameProps) {
   useEffect(() => {
     if (!dealer || !playerId) return;
     
-    const isTurn = dealer.currentTurn < dealer.turnOrder.length && 
-      dealer.turnOrder[dealer.currentTurn] === playerId;
+    const isTurn = dealer.currentTurn < dealer.turnOrder.length && dealer.turnOrder[dealer.currentTurn] === playerId;
     setIsMyTurn(isTurn);
+    if (isTurn) {
+      console.log(`[DEBUG] It is now your turn: ${playerId}`);
+    }
   }, [dealer?.currentTurn, dealer?.turnOrder, playerId]);
 
   useEffect(() => {
@@ -211,6 +219,7 @@ export default function Game({ gameId, playerId }: GameProps) {
   }, [isMyTurn, dealer, players, playerId]);
 
   const handleBetOrCall = async (action: 'fold' | 'check' | 'call' | 'raise') => {
+    console.log(`[DEBUG] handleBetOrCall: action=${action}, betInput=${betInput}, playerId=${playerId}`);
     try {
       if (action === 'raise') {
         await submitBet(gameId, playerId, 'raise', betInput);
@@ -225,6 +234,7 @@ export default function Game({ gameId, playerId }: GameProps) {
   };
 
   const handleSnipe = async (prediction: string) => {
+    console.log(`[DEBUG] handleSnipe: prediction=${prediction}, playerId=${playerId}`);
     try {
       await submitSnipe(gameId, playerId, prediction);
       setError(null);
